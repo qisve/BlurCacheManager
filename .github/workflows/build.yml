@@ -1,0 +1,39 @@
+name: Build BlurCacheManager
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+      - run: chmod +x gradlew
+      - run: ./gradlew assembleRelease
+      - uses: actions/upload-artifact@v4
+        with:
+          name: BlurCacheManager-release
+          path: app/build/outputs/apk/release/*.apk
+          retention-days: 30
+      - name: Get version
+        id: version
+        run: echo "VERSION=$(date +%Y%m%d-%H%M)" >> $GITHUB_OUTPUT
+      - name: Delete old release
+        uses: dev-drprasad/delete-tag-and-release@v1.1
+        with:
+          tag: latest
+          delete_release: true
+        continue-on-error: true
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: latest
+          name: Build ${{ steps.version.outputs.VERSION }}
+          body: 自动编译 - ${{ steps.version.outputs.VERSION }}
+          files: app/build/outputs/apk/release/*.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
