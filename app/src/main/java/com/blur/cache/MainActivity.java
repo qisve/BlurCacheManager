@@ -1,17 +1,12 @@
 package com.blur.cache;
-import android.Manifest;
 import android.content.Intent;
-import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.drawable.BitmapDrawable;
-import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.widget.TextView;
 import androidx.appcompat.app.AppCompatActivity;
-import androidx.core.app.ActivityCompat;
-import androidx.core.content.ContextCompat;
 import com.google.android.material.button.MaterialButton;
 import android.app.WallpaperManager;
 import java.text.SimpleDateFormat;
@@ -52,22 +47,12 @@ public class MainActivity extends AppCompatActivity {
                 try {
                     BitmapDrawable drawable = (BitmapDrawable) wpm.getDrawable();
                     if (drawable != null) bitmap = drawable.getBitmap();
-                } catch (SecurityException e) {
-                    appendLog("SecurityException: " + e.getMessage());
                 } catch (Exception e) {
-                    appendLog("获取壁纸异常: " + e.getMessage());
-                }
-                if (bitmap == null) {
-                    try {
-                        BitmapDrawable bd = (BitmapDrawable) wpm.peekDrawable();
-                        if (bd != null) bitmap = bd.getBitmap();
-                    } catch (Exception e) {
-                        appendLog("peekDrawable 失败: " + e.getMessage());
-                    }
+                    handler.post(() -> appendLog("获取壁纸失败: " + e.getMessage()));
                 }
                 if (bitmap == null) {
                     handler.post(() -> {
-                        appendLog("无法获取壁纸，尝试用截图替代");
+                        appendLog("无法获取壁纸");
                         tvStatus.setText("获取壁纸失败");
                         tvStatus.setTextColor(0xFFFF5252);
                         btnGenerate.setEnabled(true);
@@ -93,6 +78,8 @@ public class MainActivity extends AppCompatActivity {
             } catch (Exception e) {
                 handler.post(() -> {
                     appendLog("异常: " + e.getMessage());
+                    tvStatus.setText("异常");
+                    tvStatus.setTextColor(0xFFFF5252);
                     btnGenerate.setEnabled(true);
                 });
             }
