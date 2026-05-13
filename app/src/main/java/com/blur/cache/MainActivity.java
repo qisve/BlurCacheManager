@@ -9,6 +9,7 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.util.Log;
 import android.widget.TextView;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
@@ -20,6 +21,7 @@ import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.Locale;
 public class MainActivity extends AppCompatActivity {
+    private static final String TAG = "BlurCache";
     private TextView tvStatus, tvCacheSize, tvWallpaperHash, tvLog;
     private MaterialButton btnGenerate, btnStartService, btnStopService;
     private Handler handler;
@@ -41,12 +43,18 @@ public class MainActivity extends AppCompatActivity {
         btnStartService.setOnClickListener(v -> { startForegroundService(new Intent(this, BlurCacheService.class)); appendLog("监听服务已启动"); });
         btnStopService.setOnClickListener(v -> { stopService(new Intent(this, BlurCacheService.class)); appendLog("监听服务已停止"); });
         requestPermissions();
-        // 打开 SuShell，整个生命周期保持
+        initSuShell();
+    }
+    private void initSuShell() {
         new Thread(() -> {
+            appendLog("正在初始化 root 权限...");
             SuShell.open();
+            boolean alive = SuShell.isAlive();
+            Log.i(TAG, "SuShell 初始化结果: " + alive);
             handler.post(() -> {
-                appendLog("SuShell 已初始化");
-                refreshStatus();
+                appendLog("root 权限: " + (alive ? "已获取" : "获取失败"));
+                if (alive) refreshStatus();
+                else appendLog("请授予 root 权限后重启 App");
             });
         }).start();
     }
@@ -70,6 +78,7 @@ public class MainActivity extends AppCompatActivity {
         }
     }
     private Bitmap getWallpaperBitmap() {
+        // 方式1: API
         try {
             WallpaperManager wpm = WallpaperManager.getInstance(this);
             BitmapDrawable drawable = (BitmapDrawable) wpm.getDrawable();
@@ -80,13 +89,16 @@ public class MainActivity extends AppCompatActivity {
         } catch (Exception e) {
             handler.post(() -> appendLog("API 方式失败: " + e.getMessage()));
         }
+        // 方式2: root
         try {
             Process p = Runtime.getRuntime().exec(new String[]{"su", "-c", "cat /data/system/users/0/wallpaper_orig"});
             InputStream is = p.getInputStream();
             Bitmap bitmap = BitmapFactory.decodeStream(is);
             is.close();
-            p.waitFor();
-            if (bitmap != null) { handler.post(() -> appendLog("通过 root 读取壁纸成功")); return bitmap; }
+            int exitCode = p.waitFor();
+            Log.i(TAG, "root 读取壁纸 exitCode=" + exitCode + " bitmap=" + (bitmap != null));
+            if (bitmap != null) { handler.post(() -> appendLog("通过 root 读取壁纸成功 (" + bitmap.getWidth() + "x" + bitmap.getHeight() + ")")); return bitmap; }
+            handler.post(() -> appendLog("root 读取返回空 bitmap, exitCode=" + exitCode));
         } catch (Exception e) {
             handler.post(() -> appendLog("root 读取失败: " + e.getMessage()));
         }
@@ -131,6 +143,7 @@ public class MainActivity extends AppCompatActivity {
             long size = BlurCacheGenerator.getCacheSize();
             String hash = BlurCacheGenerator.getCachedHash();
             boolean ready = BlurCacheGenerator.isReady();
+            Log.i(TAG, "refreshStatus: size=" + size + " hash=" + hash + " ready=" + ready);
             String sizeStr;
             if (size > 1024 * 1024) sizeStr = String.format("%.1f MB", size / (1024.0 * 1024.0));
             else if (size > 1024) sizeStr = String.format("%.1f KB", size / 1024.0);
@@ -150,5 +163,6 @@ public class MainActivity extends AppCompatActivity {
         String[] lines = logBuilder.toString().split("\n");
         if (lines.length > 50) { logBuilder = new StringBuilder(); for (int i = 0; i < 50; i++) logBuilder.append(lines[i]).append("\n"); }
         tvLog.setText(logBuilder.toString());
+        Log.d(TAG, msg);
     }
 }
