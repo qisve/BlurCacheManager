@@ -29,12 +29,10 @@ public class BlurCacheGenerator {
     };
     public static void generate(Context context, Bitmap wallpaper, Callback callback) {
         new Thread(() -> {
-            boolean needClose = false;
             try {
                 long start = SystemClock.elapsedRealtime();
-                if (!SuShell.isAlive()) { SuShell.open(); needClose = true; }
-                callback.onProgress("创建临时目录...");
                 SuShell.exec("mkdir -p " + TMP_DIR);
+                callback.onProgress("创建临时目录...");
                 callback.onProgress("生成亮色缓存...");
                 generateSet(wallpaper, "light", callback);
                 callback.onProgress("生成深色缓存...");
@@ -54,8 +52,6 @@ public class BlurCacheGenerator {
                 Log.e(TAG, "生成失败", e);
                 SuShell.exec("rm -rf " + TMP_DIR);
                 callback.onError(e.getMessage());
-            } finally {
-                if (needClose) SuShell.close();
             }
         }).start();
     }
@@ -123,7 +119,6 @@ public class BlurCacheGenerator {
     public static long getCacheSize() {
         long size = 0;
         try {
-            if (!SuShell.isAlive()) SuShell.open();
             List<String> lines = SuShell.execWithOutput("du -sb " + CACHE_DIR + " 2>/dev/null | cut -f1");
             if (!lines.isEmpty()) size = Long.parseLong(lines.get(0).trim());
         } catch (Exception e) { Log.e(TAG, "getCacheSize 失败", e); }
@@ -131,14 +126,12 @@ public class BlurCacheGenerator {
     }
     public static String getCachedHash() {
         try {
-            if (!SuShell.isAlive()) SuShell.open();
             List<String> lines = SuShell.execWithOutput("cat " + CACHE_DIR + "/wallpaper_hash 2>/dev/null");
             return lines.isEmpty() ? "" : lines.get(0).trim();
         } catch (Exception e) { return ""; }
     }
     public static boolean isReady() {
         try {
-            if (!SuShell.isAlive()) SuShell.open();
             List<String> lines = SuShell.execWithOutput("test -f " + CACHE_DIR + "/wallpaper_hash && echo ready");
             return !lines.isEmpty() && lines.get(0).trim().equals("ready");
         } catch (Exception e) { return false; }

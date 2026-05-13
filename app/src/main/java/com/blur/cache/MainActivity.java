@@ -41,9 +41,20 @@ public class MainActivity extends AppCompatActivity {
         btnStartService.setOnClickListener(v -> { startForegroundService(new Intent(this, BlurCacheService.class)); appendLog("监听服务已启动"); });
         btnStopService.setOnClickListener(v -> { stopService(new Intent(this, BlurCacheService.class)); appendLog("监听服务已停止"); });
         requestPermissions();
-        refreshStatus();
+        // 打开 SuShell，整个生命周期保持
+        new Thread(() -> {
+            SuShell.open();
+            handler.post(() -> {
+                appendLog("SuShell 已初始化");
+                refreshStatus();
+            });
+        }).start();
     }
     @Override protected void onResume() { super.onResume(); refreshStatus(); }
+    @Override protected void onDestroy() {
+        SuShell.close();
+        super.onDestroy();
+    }
     private void requestPermissions() {
         if (Build.VERSION.SDK_INT < 33) {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
@@ -70,7 +81,6 @@ public class MainActivity extends AppCompatActivity {
             handler.post(() -> appendLog("API 方式失败: " + e.getMessage()));
         }
         try {
-            if (!SuShell.isAlive()) SuShell.open();
             Process p = Runtime.getRuntime().exec(new String[]{"su", "-c", "cat /data/system/users/0/wallpaper_orig"});
             InputStream is = p.getInputStream();
             Bitmap bitmap = BitmapFactory.decodeStream(is);
