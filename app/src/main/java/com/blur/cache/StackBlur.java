@@ -13,10 +13,9 @@ public class StackBlur {
     }
     private static void stackBlur(int[] pix, int w, int h, int radius) {
         int div = radius + radius + 1;
-        int divSum = (div + 1) >> 1;
-        divSum *= divSum;
-        int[] dv = new int[256 * divSum];
-        for (int i = 0; i < dv.length; i++) dv[i] = i / divSum;
+        // 修复：用 div 作为除数，不是 ((div+1)/2)²
+        int[] dv = new int[256 * div];
+        for (int i = 0; i < dv.length; i++) dv[i] = i / div;
         int[] vMin = new int[Math.max(w, h)];
         int rSum, gSum, bSum, x, y, i, p, yp, yi, yw;
         yw = yi = 0;

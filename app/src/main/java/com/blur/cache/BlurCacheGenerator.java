@@ -41,7 +41,7 @@ public class BlurCacheGenerator {
                 count += generateSet(wallpaper, "light", tmpDir, callback);
                 callback.onProgress("生成深色缓存...");
                 Bitmap darkCopy = wallpaper.copy(wallpaper.getConfig(), true);
-                BrightnessAdjuster.adjust(darkCopy, 0.4f);
+                BrightnessAdjuster.adjust(darkCopy, 0.55f);
                 count += generateSet(darkCopy, "dark", tmpDir, callback);
                 darkCopy.recycle();
                 // 写 hash 文件到临时目录
