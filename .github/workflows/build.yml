@@ -15,6 +15,8 @@ jobs:
           distribution: 'temurin'
 
       - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.3'
 
       - name: Build Release APK
         run: gradle assembleRelease
