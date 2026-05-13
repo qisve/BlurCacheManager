@@ -1,12 +1,17 @@
 package com.blur.cache;
+import android.Manifest;
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.drawable.BitmapDrawable;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.widget.TextView;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.app.ActivityCompat;
+import androidx.core.content.ContextCompat;
 import com.google.android.material.button.MaterialButton;
 import android.app.WallpaperManager;
 import java.text.SimpleDateFormat;
@@ -43,14 +48,54 @@ public class MainActivity extends AppCompatActivity {
         new Thread(() -> {
             try {
                 WallpaperManager wpm = WallpaperManager.getInstance(this);
-                Bitmap bitmap = ((BitmapDrawable) wpm.getDrawable()).getBitmap();
-                if (bitmap == null) { handler.post(() -> { appendLog("无法获取壁纸"); tvStatus.setText("获取壁纸失败"); tvStatus.setTextColor(0xFFFF5252); btnGenerate.setEnabled(true); }); return; }
+                Bitmap bitmap = null;
+                try {
+                    BitmapDrawable drawable = (BitmapDrawable) wpm.getDrawable();
+                    if (drawable != null) bitmap = drawable.getBitmap();
+                } catch (SecurityException e) {
+                    appendLog("SecurityException: " + e.getMessage());
+                } catch (Exception e) {
+                    appendLog("获取壁纸异常: " + e.getMessage());
+                }
+                if (bitmap == null) {
+                    try {
+                        BitmapDrawable bd = (BitmapDrawable) wpm.peekDrawable();
+                        if (bd != null) bitmap = bd.getBitmap();
+                    } catch (Exception e) {
+                        appendLog("peekDrawable 失败: " + e.getMessage());
+                    }
+                }
+                if (bitmap == null) {
+                    handler.post(() -> {
+                        appendLog("无法获取壁纸，尝试用截图替代");
+                        tvStatus.setText("获取壁纸失败");
+                        tvStatus.setTextColor(0xFFFF5252);
+                        btnGenerate.setEnabled(true);
+                    });
+                    return;
+                }
                 BlurCacheGenerator.generate(this, bitmap, new BlurCacheGenerator.Callback() {
                     @Override public void onProgress(String message) { handler.post(() -> appendLog(message)); }
-                    @Override public void onSuccess(long elapsedMs, int fileCount) { handler.post(() -> { appendLog("完成! " + elapsedMs + "ms, " + fileCount + " 文件"); tvStatus.setText("缓存就绪"); tvStatus.setTextColor(0xFF4CAF50); btnGenerate.setEnabled(true); refreshStatus(); }); }
-                    @Override public void onError(String error) { handler.post(() -> { appendLog("失败: " + error); tvStatus.setText("生成失败"); tvStatus.setTextColor(0xFFFF5252); btnGenerate.setEnabled(true); }); }
+                    @Override public void onSuccess(long elapsedMs, int fileCount) { handler.post(() -> {
+                        appendLog("完成! " + elapsedMs + "ms, " + fileCount + " 文件");
+                        tvStatus.setText("缓存就绪");
+                        tvStatus.setTextColor(0xFF4CAF50);
+                        btnGenerate.setEnabled(true);
+                        refreshStatus();
+                    }); }
+                    @Override public void onError(String error) { handler.post(() -> {
+                        appendLog("失败: " + error);
+                        tvStatus.setText("生成失败");
+                        tvStatus.setTextColor(0xFFFF5252);
+                        btnGenerate.setEnabled(true);
+                    }); }
                 });
-            } catch (Exception e) { handler.post(() -> { appendLog("异常: " + e.getMessage()); btnGenerate.setEnabled(true); }); }
+            } catch (Exception e) {
+                handler.post(() -> {
+                    appendLog("异常: " + e.getMessage());
+                    btnGenerate.setEnabled(true);
+                });
+            }
         }).start();
     }
     private void refreshStatus() {
@@ -63,7 +108,12 @@ public class MainActivity extends AppCompatActivity {
             else if (size > 1024) sizeStr = String.format("%.1f KB", size / 1024.0);
             else sizeStr = size + " B";
             String hashStr = hash.isEmpty() ? "无" : hash.substring(0, Math.min(16, hash.length())) + "...";
-            handler.post(() -> { tvCacheSize.setText("缓存大小: " + sizeStr); tvWallpaperHash.setText("壁纸 Hash: " + hashStr); tvStatus.setText(ready ? "缓存就绪" : "缓存未就绪"); tvStatus.setTextColor(ready ? 0xFF4CAF50 : 0xFFFFC107); });
+            handler.post(() -> {
+                tvCacheSize.setText("缓存大小: " + sizeStr);
+                tvWallpaperHash.setText("壁纸 Hash: " + hashStr);
+                tvStatus.setText(ready ? "缓存就绪" : "缓存未就绪");
+                tvStatus.setTextColor(ready ? 0xFF4CAF50 : 0xFFFFC107);
+            });
         }).start();
     }
     private void appendLog(String msg) {

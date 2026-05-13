@@ -40,7 +40,13 @@ public class BlurCacheService extends Service {
             try {
                 String cachedHash = BlurCacheGenerator.getCachedHash();
                 WallpaperManager wpm = WallpaperManager.getInstance(this);
-                Bitmap current = ((BitmapDrawable) wpm.getDrawable()).getBitmap();
+                Bitmap current = null;
+                try {
+                    BitmapDrawable drawable = (BitmapDrawable) wpm.getDrawable();
+                    if (drawable != null) current = drawable.getBitmap();
+                } catch (Exception e) {
+                    Log.e(TAG, "获取壁纸失败", e);
+                }
                 if (current == null) return;
                 String currentHash = BlurCacheGenerator.computeHash(current);
                 if (cachedHash.equals(currentHash) && BlurCacheReader.isReady()) { Log.i(TAG, "缓存已就绪"); updateNotification("缓存就绪"); }
