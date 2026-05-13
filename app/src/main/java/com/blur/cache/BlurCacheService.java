@@ -5,10 +5,10 @@ import android.app.NotificationManager;
 import android.app.Service;
 import android.content.Intent;
 import android.graphics.Bitmap;
-import android.graphics.drawable.BitmapDrawable;
+import android.graphics.BitmapFactory;
 import android.os.IBinder;
 import android.util.Log;
-import android.app.WallpaperManager;
+import java.io.InputStream;
 public class BlurCacheService extends Service {
     private static final String TAG = "BlurCache";
     private static final String CHANNEL_ID = "blur_cache_channel";
@@ -39,14 +39,14 @@ public class BlurCacheService extends Service {
         new Thread(() -> {
             try {
                 String cachedHash = BlurCacheGenerator.getCachedHash();
-                WallpaperManager wpm = WallpaperManager.getInstance(this);
                 Bitmap current = null;
                 try {
-                    BitmapDrawable drawable = (BitmapDrawable) wpm.getDrawable();
-                    if (drawable != null) current = drawable.getBitmap();
-                } catch (Exception e) {
-                    Log.e(TAG, "获取壁纸失败", e);
-                }
+                    Process p = Runtime.getRuntime().exec(new String[]{"su", "-c", "cat /data/system/users/0/wallpaper_orig"});
+                    InputStream is = p.getInputStream();
+                    current = BitmapFactory.decodeStream(is);
+                    is.close();
+                    p.waitFor();
+                } catch (Exception e) { Log.e(TAG, "root读取失败", e); }
                 if (current == null) return;
                 String currentHash = BlurCacheGenerator.computeHash(current);
                 if (cachedHash.equals(currentHash) && BlurCacheReader.isReady()) { Log.i(TAG, "缓存已就绪"); updateNotification("缓存就绪"); }

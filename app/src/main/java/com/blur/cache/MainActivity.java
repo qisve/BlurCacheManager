@@ -3,6 +3,7 @@ import android.Manifest;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.graphics.drawable.BitmapDrawable;
 import android.os.Build;
 import android.os.Bundle;
@@ -14,6 +15,7 @@ import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 import com.google.android.material.button.MaterialButton;
 import android.app.WallpaperManager;
+import java.io.InputStream;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.Locale;
@@ -56,9 +58,51 @@ public class MainActivity extends AppCompatActivity {
             if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
                 appendLog("权限已授予");
             } else {
-                appendLog("权限被拒绝，可能无法获取壁纸");
+                appendLog("权限被拒绝，将使用 root 方式读取壁纸");
             }
         }
+    }
+    private Bitmap getWallpaperBitmap() {
+        // 方式1: WallpaperManager API
+        try {
+            WallpaperManager wpm = WallpaperManager.getInstance(this);
+            BitmapDrawable drawable = (BitmapDrawable) wpm.getDrawable();
+            if (drawable != null && drawable.getBitmap() != null) {
+                appendLog("通过 API 获取壁纸成功");
+                return drawable.getBitmap();
+            }
+        } catch (Exception e) {
+            handler.post(() -> appendLog("API 方式失败: " + e.getMessage()));
+        }
+        // 方式2: 通过 root 读取壁纸文件
+        try {
+            Process p = Runtime.getRuntime().exec(new String[]{"su", "-c", "cat /data/system/users/0/wallpaper_orig"});
+            InputStream is = p.getInputStream();
+            Bitmap bitmap = BitmapFactory.decodeStream(is);
+            is.close();
+            p.waitFor();
+            if (bitmap != null) {
+                handler.post(() -> appendLog("通过 root 读取壁纸成功"));
+                return bitmap;
+            }
+        } catch (Exception e) {
+            handler.post(() -> appendLog("root 读取失败: " + e.getMessage()));
+        }
+        // 方式3: 尝试其他路径
+        try {
+            Process p = Runtime.getRuntime().exec(new String[]{"su", "-c", "cat /data/system/users/0/wallpaper"});
+            InputStream is = p.getInputStream();
+            Bitmap bitmap = BitmapFactory.decodeStream(is);
+            is.close();
+            p.waitFor();
+            if (bitmap != null) {
+                handler.post(() -> appendLog("通过 root(wallpaper) 读取成功"));
+                return bitmap;
+            }
+        } catch (Exception e) {
+            handler.post(() -> appendLog("root wallpaper 失败: " + e.getMessage()));
+        }
+        return null;
     }
     private void generateCache() {
         appendLog("开始生成缓存...");
@@ -66,71 +110,32 @@ public class MainActivity extends AppCompatActivity {
         tvStatus.setTextColor(0xFFFFC107);
         btnGenerate.setEnabled(false);
         new Thread(() -> {
-            try {
-                WallpaperManager wpm = WallpaperManager.getInstance(this);
-                Bitmap bitmap = null;
-                try {
-                    BitmapDrawable drawable = (BitmapDrawable) wpm.getDrawable();
-                    if (drawable != null) bitmap = drawable.getBitmap();
-                } catch (Exception e) {
-                    handler.post(() -> appendLog("getDrawable 失败: " + e.getMessage()));
-                }
-                if (bitmap == null) {
-                    try {
-                        BitmapDrawable bd = (BitmapDrawable) wpm.peekDrawable();
-                        if (bd != null) bitmap = bd.getBitmap();
-                    } catch (Exception e) {
-                        handler.post(() -> appendLog("peekDrawable 失败: " + e.getMessage()));
-                    }
-                }
-                if (bitmap == null) {
-                    try {
-                        String path = "/data/system/users/0/wallpaper_orig";
-                        java.io.File f = new java.io.File(path);
-                        if (f.exists()) {
-                            java.io.FileInputStream fis = new java.io.FileInputStream(f);
-                            bitmap = android.graphics.BitmapFactory.decodeStream(fis);
-                            fis.close();
-                            handler.post(() -> appendLog("通过 root 文件读取壁纸成功"));
-                        }
-                    } catch (Exception e) {
-                        handler.post(() -> appendLog("文件读取失败: " + e.getMessage()));
-                    }
-                }
-                if (bitmap == null) {
-                    handler.post(() -> {
-                        appendLog("所有方式均无法获取壁纸");
-                        tvStatus.setText("获取壁纸失败");
-                        tvStatus.setTextColor(0xFFFF5252);
-                        btnGenerate.setEnabled(true);
-                    });
-                    return;
-                }
-                final Bitmap finalBitmap = bitmap;
-                BlurCacheGenerator.generate(this, finalBitmap, new BlurCacheGenerator.Callback() {
-                    @Override public void onProgress(String message) { handler.post(() -> appendLog(message)); }
-                    @Override public void onSuccess(long elapsedMs, int fileCount) { handler.post(() -> {
-                        appendLog("完成! " + elapsedMs + "ms, " + fileCount + " 文件");
-                        tvStatus.setText("缓存就绪");
-                        tvStatus.setTextColor(0xFF4CAF50);
-                        btnGenerate.setEnabled(true);
-                        refreshStatus();
-                    }); }
-                    @Override public void onError(String error) { handler.post(() -> {
-                        appendLog("失败: " + error);
-                        tvStatus.setText("生成失败");
-                        tvStatus.setTextColor(0xFFFF5252);
-                        btnGenerate.setEnabled(true);
-                    }); }
-                });
-            } catch (Exception e) {
+            Bitmap bitmap = getWallpaperBitmap();
+            if (bitmap == null) {
                 handler.post(() -> {
-                    appendLog("异常: " + e.getMessage());
-                    tvStatus.setText("异常");
+                    appendLog("所有方式均无法获取壁纸，请确认已授予存储权限或已 root");
+                    tvStatus.setText("获取壁纸失败");
                     tvStatus.setTextColor(0xFFFF5252);
                     btnGenerate.setEnabled(true);
                 });
+                return;
             }
+            BlurCacheGenerator.generate(this, bitmap, new BlurCacheGenerator.Callback() {
+                @Override public void onProgress(String message) { handler.post(() -> appendLog(message)); }
+                @Override public void onSuccess(long elapsedMs, int fileCount) { handler.post(() -> {
+                    appendLog("完成! " + elapsedMs + "ms, " + fileCount + " 文件");
+                    tvStatus.setText("缓存就绪");
+                    tvStatus.setTextColor(0xFF4CAF50);
+                    btnGenerate.setEnabled(true);
+                    refreshStatus();
+                }); }
+                @Override public void onError(String error) { handler.post(() -> {
+                    appendLog("失败: " + error);
+                    tvStatus.setText("生成失败");
+                    tvStatus.setTextColor(0xFFFF5252);
+                    btnGenerate.setEnabled(true);
+                }); }
+            });
         }).start();
     }
     private void refreshStatus() {
