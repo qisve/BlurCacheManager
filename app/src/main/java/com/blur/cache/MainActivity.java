@@ -55,52 +55,30 @@ public class MainActivity extends AppCompatActivity {
     public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
         if (requestCode == REQ_PERMISSION) {
-            if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                appendLog("权限已授予");
-            } else {
-                appendLog("权限被拒绝，将使用 root 方式读取壁纸");
-            }
+            appendLog(grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED ? "权限已授予" : "权限被拒绝，使用 root 方式");
         }
     }
     private Bitmap getWallpaperBitmap() {
-        // 方式1: WallpaperManager API
         try {
             WallpaperManager wpm = WallpaperManager.getInstance(this);
             BitmapDrawable drawable = (BitmapDrawable) wpm.getDrawable();
             if (drawable != null && drawable.getBitmap() != null) {
-                appendLog("通过 API 获取壁纸成功");
+                handler.post(() -> appendLog("通过 API 获取壁纸成功"));
                 return drawable.getBitmap();
             }
         } catch (Exception e) {
             handler.post(() -> appendLog("API 方式失败: " + e.getMessage()));
         }
-        // 方式2: 通过 root 读取壁纸文件
         try {
+            if (!SuShell.isAlive()) SuShell.open();
             Process p = Runtime.getRuntime().exec(new String[]{"su", "-c", "cat /data/system/users/0/wallpaper_orig"});
             InputStream is = p.getInputStream();
             Bitmap bitmap = BitmapFactory.decodeStream(is);
             is.close();
             p.waitFor();
-            if (bitmap != null) {
-                handler.post(() -> appendLog("通过 root 读取壁纸成功"));
-                return bitmap;
-            }
+            if (bitmap != null) { handler.post(() -> appendLog("通过 root 读取壁纸成功")); return bitmap; }
         } catch (Exception e) {
             handler.post(() -> appendLog("root 读取失败: " + e.getMessage()));
-        }
-        // 方式3: 尝试其他路径
-        try {
-            Process p = Runtime.getRuntime().exec(new String[]{"su", "-c", "cat /data/system/users/0/wallpaper"});
-            InputStream is = p.getInputStream();
-            Bitmap bitmap = BitmapFactory.decodeStream(is);
-            is.close();
-            p.waitFor();
-            if (bitmap != null) {
-                handler.post(() -> appendLog("通过 root(wallpaper) 读取成功"));
-                return bitmap;
-            }
-        } catch (Exception e) {
-            handler.post(() -> appendLog("root wallpaper 失败: " + e.getMessage()));
         }
         return null;
     }
@@ -113,7 +91,7 @@ public class MainActivity extends AppCompatActivity {
             Bitmap bitmap = getWallpaperBitmap();
             if (bitmap == null) {
                 handler.post(() -> {
-                    appendLog("所有方式均无法获取壁纸，请确认已授予存储权限或已 root");
+                    appendLog("无法获取壁纸，请确认已 root");
                     tvStatus.setText("获取壁纸失败");
                     tvStatus.setTextColor(0xFFFF5252);
                     btnGenerate.setEnabled(true);
@@ -142,7 +120,7 @@ public class MainActivity extends AppCompatActivity {
         new Thread(() -> {
             long size = BlurCacheGenerator.getCacheSize();
             String hash = BlurCacheGenerator.getCachedHash();
-            boolean ready = BlurCacheReader.isReady();
+            boolean ready = BlurCacheGenerator.isReady();
             String sizeStr;
             if (size > 1024 * 1024) sizeStr = String.format("%.1f MB", size / (1024.0 * 1024.0));
             else if (size > 1024) sizeStr = String.format("%.1f KB", size / 1024.0);

@@ -5,6 +5,8 @@ import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.util.Log;
 import java.io.File;
+import java.io.FileInputStream;
+import java.util.List;
 public class BlurCacheReader {
     private static final String TAG = "BlurCache";
     private static final String CACHE_DIR = "/data/adb/blur_cache";
@@ -17,8 +19,7 @@ public class BlurCacheReader {
         return result;
     }
     public static boolean isReady() {
-        File hashFile = new File(CACHE_DIR + "/wallpaper_hash");
-        return hashFile.exists() && hashFile.length() > 0;
+        return BlurCacheGenerator.isReady();
     }
     private static int getRadius(String component) {
         switch (component) {
@@ -31,6 +32,7 @@ public class BlurCacheReader {
     }
     private static Bitmap loadBitmap(String path) {
         try {
+            if (!SuShell.isAlive()) SuShell.open();
             Process p = Runtime.getRuntime().exec(new String[]{"su", "-c", "cat " + path});
             Bitmap bitmap = BitmapFactory.decodeStream(p.getInputStream());
             p.waitFor();

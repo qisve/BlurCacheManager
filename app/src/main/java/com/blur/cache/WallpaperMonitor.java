@@ -59,15 +59,6 @@ public class WallpaperMonitor {
                 is.close();
                 p.waitFor();
             } catch (Exception e) { Log.e(TAG, "root 读取壁纸失败", e); }
-            if (bitmap == null) {
-                try {
-                    Process p = Runtime.getRuntime().exec(new String[]{"su", "-c", "cat /data/system/users/0/wallpaper"});
-                    InputStream is = p.getInputStream();
-                    bitmap = BitmapFactory.decodeStream(is);
-                    is.close();
-                    p.waitFor();
-                } catch (Exception e) { Log.e(TAG, "root wallpaper 失败", e); }
-            }
             if (bitmap != null) {
                 BlurCacheGenerator.generate(context, bitmap, callback);
             } else {
