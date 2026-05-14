@@ -1,18 +1,219 @@
 <?xml version="1.0" encoding="utf-8"?>
-<ScrollView xmlns:android="http://schemas.android.com/apk/res/android" android:layout_width="match_parent" android:layout_height="match_parent" android:background="@color/bg_dark" android:padding="24dp">
-    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical">
-        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="BlurCache Manager" android:textSize="28sp" android:textColor="@color/text_primary" android:textStyle="bold" android:layout_marginBottom="8dp" />
-        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="模糊缓存管理系统" android:textSize="14sp" android:textColor="@color/text_muted" android:layout_marginBottom="32dp" />
-        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:background="@color/surface_dark" android:padding="20dp" android:layout_marginBottom="16dp">
-            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="状态" android:textSize="12sp" android:textColor="@color/text_muted" android:layout_marginBottom="8dp" />
-            <TextView android:id="@+id/tv_status" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="待机中" android:textSize="18sp" android:textColor="@color/accent" android:textStyle="bold" android:layout_marginBottom="16dp" />
-            <TextView android:id="@+id/tv_cache_size" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="缓存大小: --" android:textSize="12sp" android:textColor="@color/text_muted" android:layout_marginBottom="4dp" />
-            <TextView android:id="@+id/tv_wallpaper_hash" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="壁纸 Hash: --" android:textSize="12sp" android:textColor="@color/text_muted" />
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/bg_primary"
+    android:fillViewport="true"
+    android:overScrollMode="never">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:paddingHorizontal="20dp"
+        android:paddingTop="48dp"
+        android:paddingBottom="24dp">
+
+        <!-- Header -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="BlurCache"
+            android:textSize="26sp"
+            android:textColor="@color/text_primary"
+            android:textStyle="bold"
+            android:letterSpacing="0.02"
+            android:layout_marginBottom="4dp"/>
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="模糊缓存管理系统"
+            android:textSize="13sp"
+            android:textColor="@color/text_secondary"
+            android:layout_marginBottom="28dp"/>
+
+        <!-- Status Card -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="@drawable/bg_card"
+            android:padding="20dp"
+            android:layout_marginBottom="16dp">
+
+            <!-- Status Row -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginBottom="16dp">
+
+                <View
+                    android:id="@+id/status_dot"
+                    android:layout_width="8dp"
+                    android:layout_height="8dp"
+                    android:background="@color/status_warning"
+                    android:layout_marginEnd="10dp"/>
+
+                <TextView
+                    android:id="@+id/tv_status"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="初始化中..."
+                    android:textSize="16sp"
+                    android:textColor="@color/status_warning"
+                    android:textStyle="bold"/>
+            </LinearLayout>
+
+            <!-- Divider -->
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:background="@color/divider"
+                android:layout_marginBottom="16dp"/>
+
+            <!-- Info Rows -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:layout_marginBottom="10dp">
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="缓存大小"
+                    android:textSize="13sp"
+                    android:textColor="@color/text_secondary"/>
+                <TextView
+                    android:id="@+id/tv_cache_size"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="--"
+                    android:textSize="13sp"
+                    android:textColor="@color/text_primary"
+                    android:fontFamily="monospace"/>
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:layout_marginBottom="10dp">
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="壁纸 Hash"
+                    android:textSize="13sp"
+                    android:textColor="@color/text_secondary"/>
+                <TextView
+                    android:id="@+id/tv_wallpaper_hash"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="--"
+                    android:textSize="13sp"
+                    android:textColor="@color/text_primary"
+                    android:fontFamily="monospace"/>
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="文件数量"
+                    android:textSize="13sp"
+                    android:textColor="@color/text_secondary"/>
+                <TextView
+                    android:id="@+id/tv_file_count"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="--"
+                    android:textSize="13sp"
+                    android:textColor="@color/text_primary"
+                    android:fontFamily="monospace"/>
+            </LinearLayout>
         </LinearLayout>
-        <com.google.android.material.button.MaterialButton android:id="@+id/btn_generate" android:layout_width="match_parent" android:layout_height="56dp" android:text="立即生成缓存" android:textSize="16sp" android:layout_marginBottom="12dp" />
-        <com.google.android.material.button.MaterialButton android:id="@+id/btn_start_service" style="@style/Widget.Material3.Button.OutlinedButton" android:layout_width="match_parent" android:layout_height="56dp" android:text="启动监听服务" android:textSize="16sp" android:layout_marginBottom="12dp" />
-        <com.google.android.material.button.MaterialButton android:id="@+id/btn_stop_service" style="@style/Widget.Material3.Button.OutlinedButton" android:layout_width="match_parent" android:layout_height="56dp" android:text="停止监听服务" android:textSize="16sp" android:layout_marginBottom="32dp" />
-        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="运行日志" android:textSize="12sp" android:textColor="@color/text_muted" android:layout_marginBottom="8dp" />
-        <TextView android:id="@+id/tv_log" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="等待操作..." android:textSize="11sp" android:textColor="@color/text_muted" android:fontFamily="monospace" android:lineSpacingExtra="4dp" android:background="@color/surface_dark" android:padding="12dp" />
+
+        <!-- Primary Button -->
+        <TextView
+            android:id="@+id/btn_generate"
+            android:layout_width="match_parent"
+            android:layout_height="52dp"
+            android:background="@drawable/bg_button_primary"
+            android:gravity="center"
+            android:text="立即生成缓存"
+            android:textSize="15sp"
+            android:textColor="#FFFFFFFF"
+            android:textStyle="bold"
+            android:clickable="true"
+            android:focusable="true"
+            android:layout_marginBottom="12dp"/>
+
+        <!-- Secondary Buttons Row -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="24dp">
+
+            <TextView
+                android:id="@+id/btn_start_service"
+                android:layout_width="0dp"
+                android:layout_height="48dp"
+                android:layout_weight="1"
+                android:background="@drawable/bg_button_outline"
+                android:gravity="center"
+                android:text="启动监听"
+                android:textSize="14sp"
+                android:textColor="@color/text_secondary"
+                android:clickable="true"
+                android:focusable="true"
+                android:layout_marginEnd="8dp"/>
+
+            <TextView
+                android:id="@+id/btn_stop_service"
+                android:layout_width="0dp"
+                android:layout_height="48dp"
+                android:layout_weight="1"
+                android:background="@drawable/bg_button_outline"
+                android:gravity="center"
+                android:text="停止监听"
+                android:textSize="14sp"
+                android:textColor="@color/text_secondary"
+                android:clickable="true"
+                android:focusable="true"
+                android:layout_marginStart="8dp"/>
+        </LinearLayout>
+
+        <!-- Log Section -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="运行日志"
+            android:textSize="12sp"
+            android:textColor="@color/text_secondary"
+            android:layout_marginBottom="8dp"/>
+
+        <TextView
+            android:id="@+id/tv_log"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:minHeight="120dp"
+            android:background="@drawable/bg_log"
+            android:padding="14dp"
+            android:text="等待操作..."
+            android:textSize="11sp"
+            android:textColor="@color/text_secondary"
+            android:fontFamily="monospace"
+            android:lineSpacingExtra="3dp"/>
+
     </LinearLayout>
 </ScrollView>

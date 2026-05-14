@@ -4,7 +4,6 @@ import android.graphics.Bitmap;
 import android.os.SystemClock;
 import android.util.Log;
 import java.io.File;
-import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.FileWriter;
 import java.security.MessageDigest;
@@ -21,11 +20,11 @@ public class BlurCacheGenerator {
         BlurConfig(String c, float s, int b) { component = c; scaleFactor = s; blurRadius = b; }
     }
     private static final BlurConfig[] CONFIGS = {
-        new BlurConfig("capsule", 1.0f / 8, 25),
-        new BlurConfig("notify", 1.0f / 4, 15),
-        new BlurConfig("volume", 1.0f / 4, 20),
-        new BlurConfig("recent", 1.0f / 4, 10),
-        new BlurConfig("statusbar", 1.0f / 8, 15),
+        new BlurConfig("capsule",   1.0f / 4, 30),
+        new BlurConfig("notify",    1.0f / 3, 20),
+        new BlurConfig("volume",    1.0f / 3, 25),
+        new BlurConfig("recent",    1.0f / 3, 15),
+        new BlurConfig("statusbar", 1.0f / 4, 20),
     };
     public static void generate(Context context, Bitmap wallpaper, Callback callback) {
         new Thread(() -> {
@@ -43,8 +42,7 @@ public class BlurCacheGenerator {
                 darkCopy.recycle();
                 callback.onProgress("计算壁纸 Hash...");
                 String hash = computeHash(wallpaper);
-                File hashFile = new File(cacheDir, "wallpaper_hash");
-                FileWriter fw = new FileWriter(hashFile);
+                FileWriter fw = new FileWriter(new File(cacheDir, "wallpaper_hash"));
                 fw.write(hash);
                 fw.close();
                 count++;
@@ -68,7 +66,9 @@ public class BlurCacheGenerator {
             Bitmap scaled = Bitmap.createScaledBitmap(source, targetW, targetH, true);
             Bitmap blurred = scaled.copy(Bitmap.Config.ARGB_8888, true);
             if (scaled != blurred) scaled.recycle();
+            // 双通道模糊：第一次全半径，第二次半半径 → 更平滑的高斯效果
             StackBlur.blur(blurred, config.blurRadius);
+            StackBlur.blur(blurred, Math.max(1, config.blurRadius / 2));
             String filename = prefix + "_" + config.component + "_" + config.blurRadius + ".png";
             File outFile = new File(cacheDir, filename);
             try {

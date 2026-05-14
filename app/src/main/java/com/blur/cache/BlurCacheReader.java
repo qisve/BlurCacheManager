@@ -16,7 +16,7 @@ public class BlurCacheReader {
             Bitmap bitmap = BitmapFactory.decodeFile(file.getAbsolutePath());
             if (bitmap != null) return bitmap;
         }
-        Log.w(TAG, "缓存未命中: " + component + " → " + file.getAbsolutePath());
+        Log.w(TAG, "缓存未命中: " + component);
         return generateFallback(context);
     }
     public static boolean isReady() {
@@ -24,12 +24,12 @@ public class BlurCacheReader {
     }
     private static int getRadius(String component) {
         switch (component) {
-            case "capsule": return 25;
-            case "notify": return 15;
-            case "volume": return 20;
-            case "recent": return 10;
-            case "statusbar": return 15;
-            default: return 20;
+            case "capsule":   return 30;
+            case "notify":    return 20;
+            case "volume":    return 25;
+            case "recent":    return 15;
+            case "statusbar": return 20;
+            default:          return 20;
         }
     }
     private static boolean isDarkMode(Context context) {
