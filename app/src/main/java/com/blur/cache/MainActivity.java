@@ -5,10 +5,13 @@ import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.drawable.BitmapDrawable;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Environment;
 import android.os.Handler;
 import android.os.Looper;
+import android.provider.Settings;
 import android.widget.TextView;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
@@ -26,6 +29,7 @@ public class MainActivity extends AppCompatActivity {
     private Handler handler;
     private StringBuilder logBuilder = new StringBuilder();
     private static final int REQ_PERMISSION = 100;
+    private static final int REQ_MANAGE_STORAGE = 101;
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -41,22 +45,45 @@ public class MainActivity extends AppCompatActivity {
         btnGenerate.setOnClickListener(v -> generateCache());
         btnStartService.setOnClickListener(v -> { startForegroundService(new Intent(this, BlurCacheService.class)); appendLog("监听服务已启动"); });
         btnStopService.setOnClickListener(v -> { stopService(new Intent(this, BlurCacheService.class)); appendLog("监听服务已停止"); });
-        requestPermissions();
-        // 迁移旧缓存
-        new Thread(() -> {
-            CacheConfig.migrateIfNeeded();
-            handler.post(() -> refreshStatus());
-        }).start();
+        checkAndRequestPermissions();
     }
-    @Override protected void onResume() { super.onResume(); refreshStatus(); }
-    private void requestPermissions() {
-        if (Build.VERSION.SDK_INT >= 33) {
-            if (ContextCompat.checkSelfPermission(this, "android.permission.READ_MEDIA_IMAGES") != PackageManager.PERMISSION_GRANTED) {
-                ActivityCompat.requestPermissions(this, new String[]{"android.permission.READ_MEDIA_IMAGES"}, REQ_PERMISSION);
+    @Override protected void onResume() {
+        super.onResume();
+        if (CacheConfig.hasStoragePermission()) {
+            CacheConfig.ensureDir();
+            CacheConfig.migrateIfNeeded();
+            refreshStatus();
+        }
+    }
+    private void checkAndRequestPermissions() {
+        if (Build.VERSION.SDK_INT >= 30) {
+            if (!Environment.isExternalStorageManager()) {
+                appendLog("需要授予「管理所有文件」权限");
+                Intent intent = new Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION);
+                intent.setData(Uri.parse("package:" + getPackageName()));
+                startActivityForResult(intent, REQ_MANAGE_STORAGE);
+            } else {
+                appendLog("存储权限已授予");
+                initCache();
             }
         } else {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
                 ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE, Manifest.permission.READ_EXTERNAL_STORAGE}, REQ_PERMISSION);
+            } else {
+                appendLog("存储权限已授予");
+                initCache();
+            }
+        }
+    }
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == REQ_MANAGE_STORAGE) {
+            if (Build.VERSION.SDK_INT >= 30 && Environment.isExternalStorageManager()) {
+                appendLog("存储权限已授予");
+                initCache();
+            } else {
+                appendLog("存储权限被拒绝，无法写入缓存");
             }
         }
     }
@@ -64,11 +91,22 @@ public class MainActivity extends AppCompatActivity {
     public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
         if (requestCode == REQ_PERMISSION) {
-            appendLog(grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED ? "存储权限已授予" : "存储权限被拒绝");
+            if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                appendLog("存储权限已授予");
+                initCache();
+            } else {
+                appendLog("存储权限被拒绝");
+            }
         }
     }
+    private void initCache() {
+        CacheConfig.ensureDir();
+        new Thread(() -> {
+            CacheConfig.migrateIfNeeded();
+            handler.post(() -> refreshStatus());
+        }).start();
+    }
     private Bitmap getWallpaperBitmap() {
-        // 方式1: API
         try {
             WallpaperManager wpm = WallpaperManager.getInstance(this);
             BitmapDrawable drawable = (BitmapDrawable) wpm.getDrawable();
@@ -79,7 +117,6 @@ public class MainActivity extends AppCompatActivity {
         } catch (Exception e) {
             handler.post(() -> appendLog("API 方式失败: " + e.getMessage()));
         }
-        // 方式2: root
         try {
             Process p = Runtime.getRuntime().exec(new String[]{"su", "-c", "cat /data/system/users/0/wallpaper_orig"});
             InputStream is = p.getInputStream();
@@ -93,6 +130,11 @@ public class MainActivity extends AppCompatActivity {
         return null;
     }
     private void generateCache() {
+        if (!CacheConfig.hasStoragePermission()) {
+            appendLog("未授权，请先授予存储权限");
+            checkAndRequestPermissions();
+            return;
+        }
         appendLog("开始生成缓存...");
         tvStatus.setText("正在生成...");
         tvStatus.setTextColor(0xFFFFC107);

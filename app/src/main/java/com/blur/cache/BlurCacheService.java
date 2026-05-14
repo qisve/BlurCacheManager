@@ -23,14 +23,12 @@ public class BlurCacheService extends Service {
         Log.i(TAG, "服务创建");
         createNotificationChannel();
         startForeground(NOTIFICATION_ID, buildNotification("初始化中..."));
-        // 迁移旧缓存
+        CacheConfig.ensureDir();
         CacheConfig.migrateIfNeeded();
         monitor = new WallpaperMonitor(this, new BlurCacheGenerator.Callback() {
             @Override public void onProgress(String message) { Log.d(TAG, message); }
             @Override public void onSuccess(long elapsedMs, int fileCount) {
-                String msg = "就绪 (" + fileCount + " 文件, " + elapsedMs + "ms)";
-                Log.i(TAG, msg);
-                updateNotification(msg);
+                updateNotification("就绪 (" + fileCount + " 文件, " + elapsedMs + "ms)");
             }
             @Override public void onError(String error) {
                 Log.e(TAG, "失败: " + error);
@@ -48,15 +46,18 @@ public class BlurCacheService extends Service {
         }
         return START_STICKY;
     }
-    @Override public void onDestroy() { Log.i(TAG, "服务销毁"); if (monitor != null) monitor.stop(); super.onDestroy(); }
+    @Override public void onDestroy() { if (monitor != null) monitor.stop(); super.onDestroy(); }
     @Override public IBinder onBind(Intent intent) { return null; }
     private void checkAndGenerateIfNeeded() {
         new Thread(() -> {
             try {
+                if (!CacheConfig.hasStoragePermission()) {
+                    updateNotification("需要存储权限");
+                    return;
+                }
                 String cachedHash = BlurCacheGenerator.getCachedHash();
                 boolean ready = BlurCacheGenerator.isReady();
                 if (ready && !cachedHash.isEmpty()) {
-                    Log.i(TAG, "缓存已存在，检查壁纸是否变更...");
                     Bitmap current = null;
                     try {
                         WallpaperManager wpm = WallpaperManager.getInstance(this);
@@ -66,14 +67,10 @@ public class BlurCacheService extends Service {
                     if (current != null) {
                         String currentHash = BlurCacheGenerator.computeHash(current);
                         if (cachedHash.equals(currentHash)) {
-                            Log.i(TAG, "缓存就绪，无需重新生成");
                             updateNotification("就绪 (" + getFileCount() + " 文件)");
                             return;
                         }
                     }
-                    Log.i(TAG, "壁纸已变更，重新生成");
-                } else {
-                    Log.i(TAG, "缓存未就绪，开始生成");
                 }
                 // 需要生成
                 Bitmap current = null;
@@ -81,7 +78,7 @@ public class BlurCacheService extends Service {
                     WallpaperManager wpm = WallpaperManager.getInstance(this);
                     BitmapDrawable drawable = (BitmapDrawable) wpm.getDrawable();
                     if (drawable != null) current = drawable.getBitmap();
-                } catch (Exception e) { Log.e(TAG, "获取壁纸失败", e); }
+                } catch (Exception e) { Log.e(TAG, "API 获取失败", e); }
                 if (current == null) {
                     try {
                         Process p = Runtime.getRuntime().exec(new String[]{"su", "-c", "cat /data/system/users/0/wallpaper_orig"});
@@ -89,12 +86,12 @@ public class BlurCacheService extends Service {
                         current = BitmapFactory.decodeStream(is);
                         is.close();
                         p.waitFor();
-                    } catch (Exception e) { Log.e(TAG, "root读取失败", e); }
+                    } catch (Exception e) { Log.e(TAG, "root 读取失败", e); }
                 }
                 if (current != null) {
                     BlurCacheGenerator.generate(this, current, new BlurCacheGenerator.Callback() {
                         @Override public void onProgress(String msg) { Log.d(TAG, msg); }
-                        @Override public void onSuccess(long ms, int count) { updateNotification("就绪 (" + count + " 文件, " + ms + "ms)"); }
+                        @Override public void onSuccess(long ms, int count) { updateNotification("就绪 (" + count + " 文件)"); }
                         @Override public void onError(String err) { updateNotification("失败: " + err); }
                     });
                 } else {
