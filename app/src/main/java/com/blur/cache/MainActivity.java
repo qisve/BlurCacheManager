@@ -18,6 +18,7 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 import android.app.WallpaperManager;
+import java.io.File;
 import java.io.InputStream;
 import java.text.SimpleDateFormat;
 import java.util.Date;
@@ -25,7 +26,7 @@ import java.util.Locale;
 public class MainActivity extends AppCompatActivity {
     private static final String TAG = "BlurCache";
     private TextView tvStatus, tvCacheSize, tvWallpaperHash, tvFileCount, tvLog;
-    private TextView btnGenerate, btnStartService, btnStopService;
+    private TextView btnGenerate, btnXposedStatus;
     private View statusDot;
     private Handler handler;
     private StringBuilder logBuilder = new StringBuilder();
@@ -43,18 +44,10 @@ public class MainActivity extends AppCompatActivity {
         tvLog = findViewById(R.id.tv_log);
         statusDot = findViewById(R.id.status_dot);
         btnGenerate = findViewById(R.id.btn_generate);
-        btnStartService = findViewById(R.id.btn_start_service);
-        btnStopService = findViewById(R.id.btn_stop_service);
+        btnXposedStatus = findViewById(R.id.btn_xposed_status);
         btnGenerate.setOnClickListener(v -> generateCache());
-        btnStartService.setOnClickListener(v -> {
-            startForegroundService(new Intent(this, BlurCacheService.class));
-            appendLog("监听服务已启动");
-        });
-        btnStopService.setOnClickListener(v -> {
-            stopService(new Intent(this, BlurCacheService.class));
-            appendLog("监听服务已停止");
-        });
         checkAndRequestPermissions();
+        checkXposedStatus();
     }
     @Override
     protected void onResume() {
@@ -63,6 +56,32 @@ public class MainActivity extends AppCompatActivity {
             CacheConfig.ensureDir();
             CacheConfig.migrateIfNeeded();
             refreshStatus();
+        }
+        checkXposedStatus();
+    }
+    private void checkXposedStatus() {
+        boolean hooked = false;
+        try {
+            Class<?> hookClass = Class.forName("com.blur.cache.XposedHook");
+            hooked = true;
+        } catch (ClassNotFoundException e) {
+            hooked = false;
+        }
+        // 备用检测：检查 LSPosed 日志
+        File lspodLog = new File("/data/misc/lspd/log/modules.log");
+        if (!hooked && lspodLog.exists()) {
+            try {
+                java.util.Scanner s = new java.util.Scanner(lspodLog).useDelimiter("\\A");
+                String log = s.hasNext() ? s.next() : "";
+                hooked = log.contains("com.blur.cache");
+            } catch (Exception ignored) {}
+        }
+        if (btnXposedStatus != null) {
+            final boolean isHooked = hooked;
+            handler.post(() -> {
+                btnXposedStatus.setText(isHooked ? "Xposed: 已激活" : "Xposed: 未激活");
+                btnXposedStatus.setTextColor(isHooked ? 0xFF4ADE80 : 0xFFF43F5E);
+            });
         }
     }
     private void checkAndRequestPermissions() {
@@ -93,7 +112,7 @@ public class MainActivity extends AppCompatActivity {
                 appendLog("存储权限已授予");
                 initCache();
             } else {
-                appendLog("存储权限被拒绝，无法写入缓存");
+                appendLog("存储权限被拒绝");
             }
         }
     }
@@ -144,7 +163,7 @@ public class MainActivity extends AppCompatActivity {
     }
     private void generateCache() {
         if (!CacheConfig.hasStoragePermission()) {
-            appendLog("未授权，请先授予存储权限");
+            appendLog("未授权");
             checkAndRequestPermissions();
             return;
         }
@@ -210,21 +229,15 @@ public class MainActivity extends AppCompatActivity {
         }).start();
     }
     private int getFileCount() {
-        java.io.File dir = CacheConfig.CACHE_DIR;
-        if (dir.exists()) {
-            java.io.File[] files = dir.listFiles();
-            return files != null ? files.length : 0;
-        }
+        File dir = CacheConfig.CACHE_DIR;
+        if (dir.exists()) { File[] files = dir.listFiles(); return files != null ? files.length : 0; }
         return 0;
     }
     private void appendLog(String msg) {
         String ts = new SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(new Date());
         logBuilder.insert(0, "[" + ts + "] " + msg + "\n");
         String[] lines = logBuilder.toString().split("\n");
-        if (lines.length > 50) {
-            logBuilder = new StringBuilder();
-            for (int i = 0; i < 50; i++) logBuilder.append(lines[i]).append("\n");
-        }
+        if (lines.length > 50) { logBuilder = new StringBuilder(); for (int i = 0; i < 50; i++) logBuilder.append(lines[i]).append("\n"); }
         tvLog.setText(logBuilder.toString());
     }
 }
