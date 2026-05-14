@@ -57,32 +57,40 @@ public class MainActivity extends AppCompatActivity {
             CacheConfig.migrateIfNeeded();
             refreshStatus();
         }
-        checkXposedStatus();
     }
     private void checkXposedStatus() {
         boolean hooked = false;
-        try {
-            Class<?> hookClass = Class.forName("com.blur.cache.XposedHook");
-            hooked = true;
-        } catch (ClassNotFoundException e) {
-            hooked = false;
-        }
-        // 备用检测：检查 LSPosed 日志
-        File lspodLog = new File("/data/misc/lspd/log/modules.log");
-        if (!hooked && lspodLog.exists()) {
+        // 方法1: 检查 LSPosed 模块列表文件
+        File modulesList = new File("/data/adb/lspd/modules.list");
+        if (modulesList.exists()) {
             try {
-                java.util.Scanner s = new java.util.Scanner(lspodLog).useDelimiter("\\A");
-                String log = s.hasNext() ? s.next() : "";
-                hooked = log.contains("com.blur.cache");
+                java.util.Scanner s = new java.util.Scanner(modulesList).useDelimiter("\\A");
+                String content = s.hasNext() ? s.next() : "";
+                hooked = content.contains("com.blur.cache");
+                s.close();
             } catch (Exception ignored) {}
         }
-        if (btnXposedStatus != null) {
-            final boolean isHooked = hooked;
-            handler.post(() -> {
-                btnXposedStatus.setText(isHooked ? "Xposed: 已激活" : "Xposed: 未激活");
-                btnXposedStatus.setTextColor(isHooked ? 0xFF4ADE80 : 0xFFF43F5E);
-            });
+        // 方法2: 检查 Xposed 框架标志
+        if (!hooked) {
+            File xposedBridge = new File("/data/misc/lspd/0/conf");
+            if (xposedBridge.exists()) hooked = true;
         }
+        // 方法3: 检查系统属性
+        if (!hooked) {
+            try {
+                Process p = Runtime.getRuntime().exec(new String[]{"getprop", "xp.hooked"});
+                InputStream is = p.getInputStream();
+                byte[] buf = new byte[64];
+                int len = is.read(buf);
+                is.close();
+                if (len > 0) hooked = new String(buf, 0, len).trim().equals("1");
+            } catch (Exception ignored) {}
+        }
+        final boolean isHooked = hooked;
+        handler.post(() -> {
+            btnXposedStatus.setText(isHooked ? "Xposed: 已激活" : "Xposed: 未激活");
+            btnXposedStatus.setTextColor(isHooked ? 0xFF4ADE80 : 0xFFF43F5E);
+        });
     }
     private void checkAndRequestPermissions() {
         if (Build.VERSION.SDK_INT >= 30) {
