@@ -13,11 +13,9 @@
         <activity android:name=".MainActivity" android:exported="true">
             <intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent-filter>
         </activity>
-        <!-- 开机检查缓存 -->
         <receiver android:name=".WallpaperMonitor$BootReceiver" android:exported="true">
             <intent-filter><action android:name="android.intent.action.BOOT_COMPLETED" /></intent-filter>
         </receiver>
-        <!-- 壁纸变更时自动重新生成 -->
         <receiver android:name=".WallpaperMonitor$WallpaperReceiver" android:exported="true">
             <intent-filter><action android:name="android.intent.action.WALLPAPER_CHANGED" /></intent-filter>
         </receiver>

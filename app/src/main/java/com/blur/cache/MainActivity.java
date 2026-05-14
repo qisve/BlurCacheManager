@@ -53,7 +53,13 @@ public class MainActivity extends AppCompatActivity {
             CacheConfig.ensureDir();
             CacheConfig.migrateIfNeeded();
             refreshStatus();
+            WallpaperMonitor.start(this);
         }
+    }
+    @Override
+    protected void onDestroy() {
+        WallpaperMonitor.stop();
+        super.onDestroy();
     }
     private void checkAndRequestPermissions() {
         if (Build.VERSION.SDK_INT >= 30) {
@@ -101,6 +107,7 @@ public class MainActivity extends AppCompatActivity {
             CacheConfig.migrateIfNeeded();
             handler.post(() -> refreshStatus());
         }).start();
+        WallpaperMonitor.start(this);
     }
     private Bitmap getWallpaperBitmap() {
         try {
