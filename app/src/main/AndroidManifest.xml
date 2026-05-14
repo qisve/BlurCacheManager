@@ -1,8 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
-    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
     <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
@@ -15,14 +13,13 @@
         <activity android:name=".MainActivity" android:exported="true">
             <intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent-filter>
         </activity>
-        <!-- Xposed 元数据 -->
-        <meta-data android:name="xposedmodule" android:value="true" />
-        <meta-data android:name="xposeddescription" android:value="模糊缓存管理系统" />
-        <meta-data android:name="xposedminversion" android:value="82" />
-        <meta-data android:name="xposedscope" android:resource="@array/xposed_scope" />
-        <!-- 保留前台服务作为备用（可选） -->
-        <service android:name=".BlurCacheService" android:foregroundServiceType="dataSync" android:exported="false" android:enabled="false" />
-        <receiver android:name=".WallpaperMonitor$BootReceiver" android:exported="true" android:enabled="false"><intent-filter><action android:name="android.intent.action.BOOT_COMPLETED" /></intent-filter></receiver>
-        <receiver android:name=".WallpaperMonitor$WallpaperReceiver" android:exported="true" android:enabled="false"><intent-filter><action android:name="android.intent.action.WALLPAPER_CHANGED" /></intent-filter></receiver>
+        <!-- 开机检查缓存 -->
+        <receiver android:name=".WallpaperMonitor$BootReceiver" android:exported="true">
+            <intent-filter><action android:name="android.intent.action.BOOT_COMPLETED" /></intent-filter>
+        </receiver>
+        <!-- 壁纸变更时自动重新生成 -->
+        <receiver android:name=".WallpaperMonitor$WallpaperReceiver" android:exported="true">
+            <intent-filter><action android:name="android.intent.action.WALLPAPER_CHANGED" /></intent-filter>
+        </receiver>
     </application>
 </manifest>

@@ -7,7 +7,6 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.FileWriter;
 import java.security.MessageDigest;
-import java.util.List;
 public class BlurCacheGenerator {
     private static final String TAG = "BlurCache";
     public interface Callback {
@@ -26,47 +25,61 @@ public class BlurCacheGenerator {
         new BlurConfig("recent",    1.0f / 3, 15),
         new BlurConfig("statusbar", 1.0f / 4, 20),
     };
+    // 异步生成（App 界面调用）
     public static void generate(Context context, Bitmap wallpaper, Callback callback) {
         new Thread(() -> {
             try {
-                long start = SystemClock.elapsedRealtime();
                 CacheConfig.ensureDir();
-                File cacheDir = CacheConfig.CACHE_DIR;
+                long start = SystemClock.elapsedRealtime();
                 callback.onProgress("生成亮色缓存...");
                 int count = 0;
-                count += generateSet(wallpaper, "light", cacheDir, callback);
+                count += generateSet(wallpaper, "light", CacheConfig.CACHE_DIR, callback);
                 callback.onProgress("生成深色缓存...");
                 Bitmap darkCopy = wallpaper.copy(wallpaper.getConfig(), true);
                 BrightnessAdjuster.adjust(darkCopy, 0.55f);
-                count += generateSet(darkCopy, "dark", cacheDir, callback);
+                count += generateSet(darkCopy, "dark", CacheConfig.CACHE_DIR, callback);
                 darkCopy.recycle();
                 callback.onProgress("计算壁纸 Hash...");
-                String hash = computeHash(wallpaper);
-                FileWriter fw = new FileWriter(new File(cacheDir, "wallpaper_hash"));
-                fw.write(hash);
-                fw.close();
+                writeHash(wallpaper);
                 count++;
                 long elapsed = SystemClock.elapsedRealtime() - start;
                 callback.onSuccess(elapsed, count);
-                Log.i(TAG, "缓存生成完成: " + elapsed + "ms, " + count + " 文件");
             } catch (Exception e) {
                 Log.e(TAG, "生成失败", e);
                 callback.onError(e.getMessage());
             }
         }).start();
     }
+    // 同步生成（广播接收器调用）
+    public static void generateSync(Context context, Bitmap wallpaper) {
+        try {
+            CacheConfig.ensureDir();
+            long start = SystemClock.elapsedRealtime();
+            int count = 0;
+            count += generateSet(wallpaper, "light", CacheConfig.CACHE_DIR, null);
+            Bitmap darkCopy = wallpaper.copy(wallpaper.getConfig(), true);
+            BrightnessAdjuster.adjust(darkCopy, 0.55f);
+            count += generateSet(darkCopy, "dark", CacheConfig.CACHE_DIR, null);
+            darkCopy.recycle();
+            writeHash(wallpaper);
+            count++;
+            long elapsed = SystemClock.elapsedRealtime() - start;
+            Log.i(TAG, "缓存生成完成: " + elapsed + "ms, " + count + " 文件");
+        } catch (Exception e) {
+            Log.e(TAG, "生成失败", e);
+        }
+    }
     private static int generateSet(Bitmap source, String prefix, File cacheDir, Callback callback) {
         int screenW = source.getWidth();
         int screenH = source.getHeight();
         int count = 0;
         for (BlurConfig config : CONFIGS) {
-            callback.onProgress("  " + prefix + "_" + config.component + "...");
+            if (callback != null) callback.onProgress("  " + prefix + "_" + config.component + "...");
             int targetW = Math.max(1, (int)(screenW * config.scaleFactor));
             int targetH = Math.max(1, (int)(screenH * config.scaleFactor));
             Bitmap scaled = Bitmap.createScaledBitmap(source, targetW, targetH, true);
             Bitmap blurred = scaled.copy(Bitmap.Config.ARGB_8888, true);
             if (scaled != blurred) scaled.recycle();
-            // 双通道模糊：第一次全半径，第二次半半径 → 更平滑的高斯效果
             StackBlur.blur(blurred, config.blurRadius);
             StackBlur.blur(blurred, Math.max(1, config.blurRadius / 2));
             String filename = prefix + "_" + config.component + "_" + config.blurRadius + ".png";
@@ -83,6 +96,16 @@ public class BlurCacheGenerator {
             blurred.recycle();
         }
         return count;
+    }
+    private static void writeHash(Bitmap bitmap) {
+        try {
+            String hash = computeHash(bitmap);
+            FileWriter fw = new FileWriter(new File(CacheConfig.CACHE_DIR, "wallpaper_hash"));
+            fw.write(hash);
+            fw.close();
+        } catch (Exception e) {
+            Log.e(TAG, "hash 写入失败", e);
+        }
     }
     public static String computeHash(Bitmap bitmap) {
         try {

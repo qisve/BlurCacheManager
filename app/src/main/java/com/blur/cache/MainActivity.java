@@ -24,9 +24,8 @@ import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.Locale;
 public class MainActivity extends AppCompatActivity {
-    private static final String TAG = "BlurCache";
     private TextView tvStatus, tvCacheSize, tvWallpaperHash, tvFileCount, tvLog;
-    private TextView btnGenerate, btnXposedStatus;
+    private TextView btnGenerate;
     private View statusDot;
     private Handler handler;
     private StringBuilder logBuilder = new StringBuilder();
@@ -44,10 +43,8 @@ public class MainActivity extends AppCompatActivity {
         tvLog = findViewById(R.id.tv_log);
         statusDot = findViewById(R.id.status_dot);
         btnGenerate = findViewById(R.id.btn_generate);
-        btnXposedStatus = findViewById(R.id.btn_xposed_status);
         btnGenerate.setOnClickListener(v -> generateCache());
         checkAndRequestPermissions();
-        checkXposedStatus();
     }
     @Override
     protected void onResume() {
@@ -57,40 +54,6 @@ public class MainActivity extends AppCompatActivity {
             CacheConfig.migrateIfNeeded();
             refreshStatus();
         }
-    }
-    private void checkXposedStatus() {
-        boolean hooked = false;
-        // 方法1: 检查 LSPosed 模块列表文件
-        File modulesList = new File("/data/adb/lspd/modules.list");
-        if (modulesList.exists()) {
-            try {
-                java.util.Scanner s = new java.util.Scanner(modulesList).useDelimiter("\\A");
-                String content = s.hasNext() ? s.next() : "";
-                hooked = content.contains("com.blur.cache");
-                s.close();
-            } catch (Exception ignored) {}
-        }
-        // 方法2: 检查 Xposed 框架标志
-        if (!hooked) {
-            File xposedBridge = new File("/data/misc/lspd/0/conf");
-            if (xposedBridge.exists()) hooked = true;
-        }
-        // 方法3: 检查系统属性
-        if (!hooked) {
-            try {
-                Process p = Runtime.getRuntime().exec(new String[]{"getprop", "xp.hooked"});
-                InputStream is = p.getInputStream();
-                byte[] buf = new byte[64];
-                int len = is.read(buf);
-                is.close();
-                if (len > 0) hooked = new String(buf, 0, len).trim().equals("1");
-            } catch (Exception ignored) {}
-        }
-        final boolean isHooked = hooked;
-        handler.post(() -> {
-            btnXposedStatus.setText(isHooked ? "Xposed: 已激活" : "Xposed: 未激活");
-            btnXposedStatus.setTextColor(isHooked ? 0xFF4ADE80 : 0xFFF43F5E);
-        });
     }
     private void checkAndRequestPermissions() {
         if (Build.VERSION.SDK_INT >= 30) {
@@ -128,12 +91,8 @@ public class MainActivity extends AppCompatActivity {
     public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
         if (requestCode == REQ_PERMISSION) {
-            if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                appendLog("存储权限已授予");
-                initCache();
-            } else {
-                appendLog("存储权限被拒绝");
-            }
+            appendLog(grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED ? "存储权限已授予" : "存储权限被拒绝");
+            if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) initCache();
         }
     }
     private void initCache() {
@@ -160,10 +119,7 @@ public class MainActivity extends AppCompatActivity {
             Bitmap bitmap = BitmapFactory.decodeStream(is);
             is.close();
             p.waitFor();
-            if (bitmap != null) {
-                handler.post(() -> appendLog("root 读取壁纸成功"));
-                return bitmap;
-            }
+            if (bitmap != null) { handler.post(() -> appendLog("root 获取壁纸成功")); return bitmap; }
         } catch (Exception e) {
             handler.post(() -> appendLog("root 失败: " + e.getMessage()));
         }

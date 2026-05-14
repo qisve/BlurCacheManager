@@ -24,11 +24,10 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="模糊缓存管理系统 · Xposed"
+            android:text="模糊缓存管理系统"
             android:textSize="13sp"
             android:textColor="@color/text_secondary"
             android:layout_marginBottom="28dp"/>
-        <!-- Status Card -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -41,7 +40,7 @@
                 android:layout_height="wrap_content"
                 android:orientation="horizontal"
                 android:gravity="center_vertical"
-                android:layout_marginBottom="12dp">
+                android:layout_marginBottom="16dp">
                 <View
                     android:id="@+id/status_dot"
                     android:layout_width="8dp"
@@ -50,20 +49,12 @@
                     android:layout_marginEnd="10dp"/>
                 <TextView
                     android:id="@+id/tv_status"
-                    android:layout_width="0dp"
+                    android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_weight="1"
                     android:text="初始化中..."
                     android:textSize="16sp"
                     android:textColor="@color/status_warning"
                     android:textStyle="bold"/>
-                <TextView
-                    android:id="@+id/btn_xposed_status"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Xposed: 检测中"
-                    android:textSize="11sp"
-                    android:textColor="@color/text_secondary"/>
             </LinearLayout>
             <View
                 android:layout_width="match_parent"
@@ -133,7 +124,6 @@
                     android:fontFamily="monospace"/>
             </LinearLayout>
         </LinearLayout>
-        <!-- Primary Button -->
         <TextView
             android:id="@+id/btn_generate"
             android:layout_width="match_parent"
@@ -147,16 +137,14 @@
             android:clickable="true"
             android:focusable="true"
             android:layout_marginBottom="12dp"/>
-        <!-- Info -->
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="壁纸变更时自动重新生成缓存，无需后台服务"
+            android:text="壁纸变更时通过系统广播自动重新生成，无需后台服务"
             android:textSize="12sp"
             android:textColor="@color/text_secondary"
             android:gravity="center"
             android:layout_marginBottom="24dp"/>
-        <!-- Log -->
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
