@@ -4,12 +4,13 @@ import android.graphics.Bitmap;
 import android.os.SystemClock;
 import android.util.Log;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileOutputStream;
+import java.io.FileWriter;
 import java.security.MessageDigest;
 import java.util.List;
 public class BlurCacheGenerator {
     private static final String TAG = "BlurCache";
-    private static final String CACHE_DIR = "/data/adb/blur_cache";
     public interface Callback {
         void onProgress(String message);
         void onSuccess(long elapsedMs, int fileCount);
@@ -30,50 +31,33 @@ public class BlurCacheGenerator {
         new Thread(() -> {
             try {
                 long start = SystemClock.elapsedRealtime();
-                SuShell.exec("mkdir -p " + CACHE_DIR);
-                // 用 app 内部存储做临时目录（不需要 root）
-                File tmpDir = new File(context.getCacheDir(), "blur_tmp");
-                if (tmpDir.exists()) deleteDir(tmpDir);
-                tmpDir.mkdirs();
-                callback.onProgress("创建临时目录...");
+                CacheConfig.ensureDir();
+                File cacheDir = CacheConfig.CACHE_DIR;
                 callback.onProgress("生成亮色缓存...");
                 int count = 0;
-                count += generateSet(wallpaper, "light", tmpDir, callback);
+                count += generateSet(wallpaper, "light", cacheDir, callback);
                 callback.onProgress("生成深色缓存...");
                 Bitmap darkCopy = wallpaper.copy(wallpaper.getConfig(), true);
                 BrightnessAdjuster.adjust(darkCopy, 0.55f);
-                count += generateSet(darkCopy, "dark", tmpDir, callback);
+                count += generateSet(darkCopy, "dark", cacheDir, callback);
                 darkCopy.recycle();
-                // 写 hash 文件到临时目录
                 callback.onProgress("计算壁纸 Hash...");
                 String hash = computeHash(wallpaper);
-                File hashFile = new File(tmpDir, "wallpaper_hash");
-                java.io.FileWriter fw = new java.io.FileWriter(hashFile);
+                File hashFile = new File(cacheDir, "wallpaper_hash");
+                FileWriter fw = new FileWriter(hashFile);
                 fw.write(hash);
                 fw.close();
                 count++;
-                callback.onProgress("共生成 " + count + " 个文件，写入缓存...");
-                // 一次性 root 复制到目标目录
-                String tmpPath = tmpDir.getAbsolutePath();
-                SuShell.exec("rm -f " + CACHE_DIR + "/*.png");
-                SuShell.exec("rm -f " + CACHE_DIR + "/wallpaper_hash");
-                SuShell.exec("cp " + tmpPath + "/* " + CACHE_DIR + "/");
-                SuShell.exec("chmod 644 " + CACHE_DIR + "/*");
-                // 验证
-                List<String> verify = SuShell.execWithOutput("ls " + CACHE_DIR + "/ 2>/dev/null");
-                int finalCount = verify.size();
-                // 清理临时目录
-                deleteDir(tmpDir);
                 long elapsed = SystemClock.elapsedRealtime() - start;
-                callback.onSuccess(elapsed, finalCount);
-                Log.i(TAG, "缓存生成完成: " + elapsed + "ms, " + finalCount + " 文件");
+                callback.onSuccess(elapsed, count);
+                Log.i(TAG, "缓存生成完成: " + elapsed + "ms, " + count + " 文件");
             } catch (Exception e) {
                 Log.e(TAG, "生成失败", e);
                 callback.onError(e.getMessage());
             }
         }).start();
     }
-    private static int generateSet(Bitmap source, String prefix, File tmpDir, Callback callback) {
+    private static int generateSet(Bitmap source, String prefix, File cacheDir, Callback callback) {
         int screenW = source.getWidth();
         int screenH = source.getHeight();
         int count = 0;
@@ -86,13 +70,12 @@ public class BlurCacheGenerator {
             if (scaled != blurred) scaled.recycle();
             StackBlur.blur(blurred, config.blurRadius);
             String filename = prefix + "_" + config.component + "_" + config.blurRadius + ".png";
-            File outFile = new File(tmpDir, filename);
+            File outFile = new File(cacheDir, filename);
             try {
                 FileOutputStream fos = new FileOutputStream(outFile);
                 blurred.compress(Bitmap.CompressFormat.PNG, 100, fos);
                 fos.flush();
                 fos.close();
-                Log.i(TAG, "已保存: " + outFile.getAbsolutePath() + " (" + outFile.length() + " bytes)");
                 count++;
             } catch (Exception e) {
                 Log.e(TAG, "保存失败: " + filename, e);
@@ -100,13 +83,6 @@ public class BlurCacheGenerator {
             blurred.recycle();
         }
         return count;
-    }
-    private static void deleteDir(File dir) {
-        if (dir.isDirectory()) {
-            File[] children = dir.listFiles();
-            if (children != null) for (File child : children) child.delete();
-        }
-        dir.delete();
     }
     public static String computeHash(Bitmap bitmap) {
         try {
@@ -127,22 +103,23 @@ public class BlurCacheGenerator {
     }
     public static long getCacheSize() {
         long size = 0;
-        try {
-            List<String> lines = SuShell.execWithOutput("du -sb " + CACHE_DIR + " 2>/dev/null | cut -f1");
-            if (!lines.isEmpty() && !lines.get(0).trim().isEmpty()) size = Long.parseLong(lines.get(0).trim());
-        } catch (Exception e) { Log.e(TAG, "getCacheSize 失败", e); }
+        File dir = CacheConfig.CACHE_DIR;
+        if (dir.exists()) {
+            File[] files = dir.listFiles();
+            if (files != null) for (File f : files) size += f.length();
+        }
         return size;
     }
     public static String getCachedHash() {
         try {
-            List<String> lines = SuShell.execWithOutput("cat " + CACHE_DIR + "/wallpaper_hash 2>/dev/null");
-            return lines.isEmpty() ? "" : lines.get(0).trim();
+            File hashFile = new File(CacheConfig.CACHE_DIR, "wallpaper_hash");
+            if (!hashFile.exists()) return "";
+            java.util.Scanner s = new java.util.Scanner(hashFile).useDelimiter("\\A");
+            return s.hasNext() ? s.next().trim() : "";
         } catch (Exception e) { return ""; }
     }
     public static boolean isReady() {
-        try {
-            List<String> lines = SuShell.execWithOutput("test -f " + CACHE_DIR + "/wallpaper_hash && echo ready");
-            return !lines.isEmpty() && lines.get(0).trim().equals("ready");
-        } catch (Exception e) { return false; }
+        File hashFile = new File(CacheConfig.CACHE_DIR, "wallpaper_hash");
+        return hashFile.exists() && hashFile.length() > 0;
     }
 }

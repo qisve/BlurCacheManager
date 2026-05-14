@@ -4,10 +4,12 @@ import android.content.Context;
 import android.content.Intent;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.graphics.drawable.BitmapDrawable;
 import android.os.FileObserver;
 import android.os.Handler;
 import android.os.Looper;
 import android.util.Log;
+import android.app.WallpaperManager;
 import java.io.File;
 import java.io.InputStream;
 public class WallpaperMonitor {
@@ -38,7 +40,10 @@ public class WallpaperMonitor {
         fileObserver = new FileObserver(WALLPAPER_DIR, mask) {
             @Override
             public void onEvent(int event, String path) {
-                if (path != null && path.startsWith("wallpaper")) { Log.i(TAG, "壁纸变更: " + path); scheduleGenerate("FileObserver: " + path); }
+                if (path != null && path.startsWith("wallpaper")) {
+                    Log.i(TAG, "壁纸变更: " + path);
+                    scheduleGenerate("FileObserver: " + path);
+                }
             }
         };
         fileObserver.startWatching();
@@ -53,12 +58,19 @@ public class WallpaperMonitor {
         new Thread(() -> {
             Bitmap bitmap = null;
             try {
-                Process p = Runtime.getRuntime().exec(new String[]{"su", "-c", "cat /data/system/users/0/wallpaper_orig"});
-                InputStream is = p.getInputStream();
-                bitmap = BitmapFactory.decodeStream(is);
-                is.close();
-                p.waitFor();
-            } catch (Exception e) { Log.e(TAG, "root 读取壁纸失败", e); }
+                WallpaperManager wpm = WallpaperManager.getInstance(context);
+                BitmapDrawable drawable = (BitmapDrawable) wpm.getDrawable();
+                if (drawable != null) bitmap = drawable.getBitmap();
+            } catch (Exception e) { Log.e(TAG, "API 获取壁纸失败", e); }
+            if (bitmap == null) {
+                try {
+                    Process p = Runtime.getRuntime().exec(new String[]{"su", "-c", "cat /data/system/users/0/wallpaper_orig"});
+                    InputStream is = p.getInputStream();
+                    bitmap = BitmapFactory.decodeStream(is);
+                    is.close();
+                    p.waitFor();
+                } catch (Exception e) { Log.e(TAG, "root 读取壁纸失败", e); }
+            }
             if (bitmap != null) {
                 BlurCacheGenerator.generate(context, bitmap, callback);
             } else {
@@ -70,7 +82,10 @@ public class WallpaperMonitor {
     public static class BootReceiver extends BroadcastReceiver {
         @Override
         public void onReceive(Context context, Intent intent) {
-            if (Intent.ACTION_BOOT_COMPLETED.equals(intent.getAction())) { Log.i(TAG, "开机启动服务"); context.startForegroundService(new Intent(context, BlurCacheService.class)); }
+            if (Intent.ACTION_BOOT_COMPLETED.equals(intent.getAction())) {
+                Log.i(TAG, "开机启动服务");
+                context.startForegroundService(new Intent(context, BlurCacheService.class));
+            }
         }
     }
     public static class WallpaperReceiver extends BroadcastReceiver {

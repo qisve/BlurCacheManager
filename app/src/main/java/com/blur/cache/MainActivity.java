@@ -9,7 +9,6 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
-import android.util.Log;
 import android.widget.TextView;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
@@ -43,30 +42,21 @@ public class MainActivity extends AppCompatActivity {
         btnStartService.setOnClickListener(v -> { startForegroundService(new Intent(this, BlurCacheService.class)); appendLog("监听服务已启动"); });
         btnStopService.setOnClickListener(v -> { stopService(new Intent(this, BlurCacheService.class)); appendLog("监听服务已停止"); });
         requestPermissions();
-        initSuShell();
-    }
-    private void initSuShell() {
+        // 迁移旧缓存
         new Thread(() -> {
-            appendLog("正在初始化 root 权限...");
-            SuShell.open();
-            boolean alive = SuShell.isAlive();
-            Log.i(TAG, "SuShell 初始化结果: " + alive);
-            handler.post(() -> {
-                appendLog("root 权限: " + (alive ? "已获取" : "获取失败"));
-                if (alive) refreshStatus();
-                else appendLog("请授予 root 权限后重启 App");
-            });
+            CacheConfig.migrateIfNeeded();
+            handler.post(() -> refreshStatus());
         }).start();
     }
     @Override protected void onResume() { super.onResume(); refreshStatus(); }
-    @Override protected void onDestroy() {
-        SuShell.close();
-        super.onDestroy();
-    }
     private void requestPermissions() {
-        if (Build.VERSION.SDK_INT < 33) {
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
-                ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.READ_EXTERNAL_STORAGE}, REQ_PERMISSION);
+        if (Build.VERSION.SDK_INT >= 33) {
+            if (ContextCompat.checkSelfPermission(this, "android.permission.READ_MEDIA_IMAGES") != PackageManager.PERMISSION_GRANTED) {
+                ActivityCompat.requestPermissions(this, new String[]{"android.permission.READ_MEDIA_IMAGES"}, REQ_PERMISSION);
+            }
+        } else {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
+                ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE, Manifest.permission.READ_EXTERNAL_STORAGE}, REQ_PERMISSION);
             }
         }
     }
@@ -74,7 +64,7 @@ public class MainActivity extends AppCompatActivity {
     public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
         if (requestCode == REQ_PERMISSION) {
-            appendLog(grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED ? "权限已授予" : "权限被拒绝，使用 root 方式");
+            appendLog(grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED ? "存储权限已授予" : "存储权限被拒绝");
         }
     }
     private Bitmap getWallpaperBitmap() {
@@ -95,10 +85,8 @@ public class MainActivity extends AppCompatActivity {
             InputStream is = p.getInputStream();
             Bitmap bitmap = BitmapFactory.decodeStream(is);
             is.close();
-            int exitCode = p.waitFor();
-            Log.i(TAG, "root 读取壁纸 exitCode=" + exitCode + " bitmap=" + (bitmap != null));
-            if (bitmap != null) { handler.post(() -> appendLog("通过 root 读取壁纸成功 (" + bitmap.getWidth() + "x" + bitmap.getHeight() + ")")); return bitmap; }
-            handler.post(() -> appendLog("root 读取返回空 bitmap, exitCode=" + exitCode));
+            p.waitFor();
+            if (bitmap != null) { handler.post(() -> appendLog("通过 root 读取壁纸成功")); return bitmap; }
         } catch (Exception e) {
             handler.post(() -> appendLog("root 读取失败: " + e.getMessage()));
         }
@@ -113,7 +101,7 @@ public class MainActivity extends AppCompatActivity {
             Bitmap bitmap = getWallpaperBitmap();
             if (bitmap == null) {
                 handler.post(() -> {
-                    appendLog("无法获取壁纸，请确认已 root");
+                    appendLog("无法获取壁纸");
                     tvStatus.setText("获取壁纸失败");
                     tvStatus.setTextColor(0xFFFF5252);
                     btnGenerate.setEnabled(true);
@@ -143,7 +131,6 @@ public class MainActivity extends AppCompatActivity {
             long size = BlurCacheGenerator.getCacheSize();
             String hash = BlurCacheGenerator.getCachedHash();
             boolean ready = BlurCacheGenerator.isReady();
-            Log.i(TAG, "refreshStatus: size=" + size + " hash=" + hash + " ready=" + ready);
             String sizeStr;
             if (size > 1024 * 1024) sizeStr = String.format("%.1f MB", size / (1024.0 * 1024.0));
             else if (size > 1024) sizeStr = String.format("%.1f KB", size / 1024.0);
@@ -163,6 +150,5 @@ public class MainActivity extends AppCompatActivity {
         String[] lines = logBuilder.toString().split("\n");
         if (lines.length > 50) { logBuilder = new StringBuilder(); for (int i = 0; i < 50; i++) logBuilder.append(lines[i]).append("\n"); }
         tvLog.setText(logBuilder.toString());
-        Log.d(TAG, msg);
     }
 }
