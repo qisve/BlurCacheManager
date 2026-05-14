@@ -10,10 +10,7 @@ import android.os.Handler;
 import android.os.Looper;
 import android.util.Log;
 import android.app.WallpaperManager;
-import java.io.BufferedReader;
-import java.io.DataOutputStream;
 import java.io.File;
-import java.io.InputStreamReader;
 import java.io.InputStream;
 public class WallpaperMonitor {
     private static final String TAG = "BlurCache";
@@ -29,6 +26,7 @@ public class WallpaperMonitor {
         if (handler == null) handler = new Handler(Looper.getMainLooper());
         if (running) return;
         running = true;
+        CacheConfig.ensureDir();
         startTriggerObserver(context);
         startRootInotify(context);
         Log.i(TAG, "壁纸监听已启动");
@@ -36,21 +34,12 @@ public class WallpaperMonitor {
 
     public static void stop() {
         running = false;
-        if (triggerObserver != null) {
-            triggerObserver.stopWatching();
-            triggerObserver = null;
-        }
-        if (suProcess != null) {
-            suProcess.destroy();
-            suProcess = null;
-        }
-        if (pendingRunnable != null && handler != null) {
-            handler.removeCallbacks(pendingRunnable);
-        }
+        if (triggerObserver != null) { triggerObserver.stopWatching(); triggerObserver = null; }
+        if (suProcess != null) { suProcess.destroy(); suProcess = null; }
+        if (pendingRunnable != null && handler != null) handler.removeCallbacks(pendingRunnable);
         Log.i(TAG, "壁纸监听已停止");
     }
 
-    // 监听 /sdcard/BlurCache/.wp_trigger 标记文件
     private static void startTriggerObserver(Context context) {
         File watchDir = CacheConfig.CACHE_DIR;
         if (!watchDir.exists()) watchDir.mkdirs();
@@ -65,71 +54,76 @@ public class WallpaperMonitor {
             }
         };
         triggerObserver.startWatching();
-        Log.i(TAG, "触发监听已启动");
+        Log.i(TAG, "触发文件监听已启动");
     }
 
-    // 用 root 的 inotifywait 监听壁纸目录（内核事件驱动，零轮询）
     private static void startRootInotify(Context context) {
         rootWatcherThread = new Thread(() -> {
             try {
-                // 检查 inotifywait 是否可用
-                Process check = Runtime.getRuntime().exec(new String[]{"su", "-c", "which inotifywait"});
-                BufferedReader checkReader = new BufferedReader(new InputStreamReader(check.getInputStream()));
-                String inotifyPath = checkReader.readLine();
-                check.waitFor();
+                String triggerPath = CacheConfig.CACHE_DIR.getAbsolutePath() + "/.wp_trigger";
+                // 创建触发脚本到 /data/adb/（root 可写可执行）
+                suProcess = Runtime.getRuntime().exec("su");
+                java.io.DataOutputStream os = new java.io.DataOutputStream(suProcess.getOutputStream());
 
-                if (inotifyPath != null && !inotifyPath.isEmpty()) {
-                    // 方式1: inotifywait（零轮询，内核事件驱动）
-                    Log.i(TAG, "使用 inotifywait 监听");
-                    suProcess = Runtime.getRuntime().exec("su");
-                    DataOutputStream os = new DataOutputStream(suProcess.getOutputStream());
-                    BufferedReader reader = new BufferedReader(new InputStreamReader(suProcess.getInputStream()));
+                // 写触发脚本
+                os.writeBytes("cat > /data/adb/blur_trigger.sh << 'SCRIPTEOF'\n");
+                os.writeBytes("#!/system/bin/sh\n");
+                os.writeBytes("echo changed > '" + triggerPath + "'\n");
+                os.writeBytes("SCRIPTEOF\n");
+                os.writeBytes("chmod 755 /data/adb/blur_trigger.sh\n");
+                os.flush();
 
-                    String triggerPath = CacheConfig.CACHE_DIR.getAbsolutePath() + "/.wp_trigger";
-                    // -m 持续监听，-e 仅监听写入完成和移动事件
-                    os.writeBytes("inotifywait -m -e close_write,moved_to /data/system/users/0/\n");
-                    os.flush();
+                // 等脚本创建完成
+                Thread.sleep(500);
 
-                    String line;
-                    while (running && (line = reader.readLine()) != null) {
-                        Log.d(TAG, "inotify: " + line);
-                        if (line.contains("wallpaper")) {
-                            // 写标记文件触发 app 侧 FileObserver
-                            os.writeBytes("echo changed > '" + triggerPath + "'\n");
-                            os.flush();
-                        }
-                    }
-                } else {
-                    // 方式2: 降级为 stat 轮询（inotifywait 不可用时）
-                    Log.i(TAG, "inotifywait 不可用，降级为 stat 轮询（每 5 秒）");
-                    suProcess = Runtime.getRuntime().exec("su");
-                    DataOutputStream os = new DataOutputStream(suProcess.getOutputStream());
+                // 用 inotifyd 监听壁纸文件（内核事件驱动，零轮询）
+                // 语法: inotifyd 脚本路径 文件路径:事件
+                // w = IN_CLOSE_WRITE（文件写入完成）
+                os.writeBytes("inotifyd /data/adb/blur_trigger.sh /data/system/users/0/wallpaper_orig:w\n");
+                os.flush();
 
-                    String triggerPath = CacheConfig.CACHE_DIR.getAbsolutePath() + "/.wp_trigger";
-                    os.writeBytes("TRIGGER='" + triggerPath + "'\n");
-                    os.writeBytes("LAST_MTIME=''\n");
-                    os.writeBytes("while true; do\n");
-                    os.writeBytes("  sleep 5\n");
-                    os.writeBytes("  MTIME=$(stat -c %Y /data/system/users/0/wallpaper_orig 2>/dev/null)\n");
-                    os.writeBytes("  if [ -n \"$MTIME\" ] && [ \"$MTIME\" != \"$LAST_MTIME\" ]; then\n");
-                    os.writeBytes("    if [ -n \"$LAST_MTIME\" ]; then echo changed > \"$TRIGGER\"; fi\n");
-                    os.writeBytes("    LAST_MTIME=$MTIME\n");
-                    os.writeBytes("  fi\n");
-                    os.writeBytes("done\n");
-                    os.flush();
+                Log.i(TAG, "inotifyd 已启动，监听壁纸文件写入事件");
+
+                // 保持 su 进程存活
+                java.io.BufferedReader reader = new java.io.BufferedReader(
+                        new java.io.InputStreamReader(suProcess.getInputStream()));
+                String line;
+                while (running && (line = reader.readLine()) != null) {
+                    Log.d(TAG, "inotifyd: " + line);
                 }
             } catch (Exception e) {
-                Log.e(TAG, "root 监听失败", e);
+                Log.e(TAG, "inotifyd 启动失败，降级为 stat 轮询", e);
+                fallbackPolling(context, CacheConfig.CACHE_DIR.getAbsolutePath() + "/.wp_trigger");
             }
         });
         rootWatcherThread.setDaemon(true);
         rootWatcherThread.start();
     }
 
-    private static void handleWallpaperChanged(Context context) {
-        if (pendingRunnable != null && handler != null) {
-            handler.removeCallbacks(pendingRunnable);
+    // 降级方案：stat 轮询
+    private static void fallbackPolling(Context context, String triggerPath) {
+        try {
+            suProcess = Runtime.getRuntime().exec("su");
+            java.io.DataOutputStream os = new java.io.DataOutputStream(suProcess.getOutputStream());
+            os.writeBytes("TRIGGER='" + triggerPath + "'\n");
+            os.writeBytes("LAST_MTIME=''\n");
+            os.writeBytes("while true; do\n");
+            os.writeBytes("  sleep 5\n");
+            os.writeBytes("  MTIME=$(stat -c %Y /data/system/users/0/wallpaper_orig 2>/dev/null)\n");
+            os.writeBytes("  if [ -n \"$MTIME\" ] && [ \"$MTIME\" != \"$LAST_MTIME\" ]; then\n");
+            os.writeBytes("    if [ -n \"$LAST_MTIME\" ]; then echo changed > \"$TRIGGER\"; fi\n");
+            os.writeBytes("    LAST_MTIME=$MTIME\n");
+            os.writeBytes("  fi\n");
+            os.writeBytes("done\n");
+            os.flush();
+            Log.i(TAG, "降级轮询已启动（每 5 秒）");
+        } catch (Exception e) {
+            Log.e(TAG, "降级轮询也失败", e);
         }
+    }
+
+    private static void handleWallpaperChanged(Context context) {
+        if (pendingRunnable != null && handler != null) handler.removeCallbacks(pendingRunnable);
         pendingRunnable = () -> {
             Log.i(TAG, "防抖结束，开始生成缓存");
             new Thread(() -> {
@@ -152,12 +146,8 @@ public class WallpaperMonitor {
         try {
             WallpaperManager wpm = WallpaperManager.getInstance(context);
             BitmapDrawable drawable = (BitmapDrawable) wpm.getDrawable();
-            if (drawable != null && drawable.getBitmap() != null) {
-                return drawable.getBitmap();
-            }
-        } catch (Exception e) {
-            Log.w(TAG, "API 获取失败", e);
-        }
+            if (drawable != null && drawable.getBitmap() != null) return drawable.getBitmap();
+        } catch (Exception e) { Log.w(TAG, "API 获取失败", e); }
         try {
             Process p = Runtime.getRuntime().exec(new String[]{"su", "-c", "cat /data/system/users/0/wallpaper_orig"});
             InputStream is = p.getInputStream();
@@ -165,9 +155,7 @@ public class WallpaperMonitor {
             is.close();
             p.waitFor();
             if (bitmap != null) return bitmap;
-        } catch (Exception e) {
-            Log.w(TAG, "root 获取失败", e);
-        }
+        } catch (Exception e) { Log.w(TAG, "root 获取失败", e); }
         return null;
     }
 
@@ -181,14 +169,11 @@ public class WallpaperMonitor {
                 try {
                     Thread.sleep(15000);
                     if (!BlurCacheGenerator.isReady()) {
-                        Log.i(TAG, "缓存未就绪，开始生成");
                         Bitmap bitmap = readWallpaper(context);
                         if (bitmap != null) BlurCacheGenerator.generateSync(context, bitmap);
                     }
                     start(context);
-                } catch (Exception e) {
-                    Log.e(TAG, "开机处理失败", e);
-                }
+                } catch (Exception e) { Log.e(TAG, "开机处理失败", e); }
             }).start();
         }
     }
